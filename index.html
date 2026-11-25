@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multiverse Atlas</title>
+<meta name="description" content="An unofficial interactive 3D map of every MCU film and series leading up to Avengers: Doomsday — which Earth, which timeline, and where realities collide.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #02030a; --panel: rgba(8, 12, 28, 0.62); --line: rgba(120, 200, 255, 0.2);
+    --text: #e6f1ff; --muted: #8aa0c0; --accent: #5ee6ff; --loki: #4dff9a; --gold: #f5c451; --doom: #ff3b3b;
+    --mx: 0; --my: 0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.45 Inter, system-ui, sans-serif; overflow: hidden; }
+  body.fine, body.fine * { cursor: none !important; }
+  #stage canvas { display: block; }
+  .labels { position: fixed !important; inset: 0; }
+  button, input, select { font: inherit; color: inherit; }
+  h1, h2, h3, .orb { font-family: Orbitron, sans-serif; letter-spacing: .06em; }
+
+  .hud { position: fixed; z-index: 5; background: var(--panel); border: 1px solid var(--line); backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%); border-radius: 14px; box-shadow: 0 0 40px rgba(60, 160, 255, .08), inset 0 0 0 1px rgba(255,255,255,.03);
+    transition: opacity .5s; }
+  #top { top: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; padding: 6px; border-radius: 999px; }
+  #top button, .chip { background: rgba(94, 230, 255, .06); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; font-size: 12px; transition: background .2s, border-color .2s; }
+  #top button:hover, .chip:hover { background: rgba(94, 230, 255, .18); border-color: var(--accent); }
+  #top .doom { border-color: rgba(255, 59, 59, .5); color: #ffb3b3; }
+
+  #list { top: 16px; left: 16px; bottom: 16px; width: 330px; display: flex; flex-direction: column; padding: 16px;
+    transform: perspective(1100px) rotateY(calc(var(--mx) * 4deg)) rotateX(calc(var(--my) * -3deg)); transform-origin: left center; }
+  #list h1 { margin: 0; font-size: 17px; font-weight: 900; background: linear-gradient(90deg, var(--loki), var(--accent), var(--gold)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  #list .sub { color: var(--muted); font-size: 12px; margin: 2px 0 12px; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+  .controls input { grid-column: 1 / -1; }
+  .controls input, .controls select { background: rgba(0,0,0,.35); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { flex: 1; background: none; border: 0; padding: 7px 4px; font-size: 11px; color: var(--muted); }
+  .seg button.on { background: rgba(94, 230, 255, .16); color: var(--text); }
+  .progress { height: 4px; background: rgba(255,255,255,.07); border-radius: 4px; overflow: hidden; margin: 4px 0 4px; }
+  .progress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--loki), var(--gold)); transition: width .4s; }
+  .ptext { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+  ol { list-style: none; margin: 0; padding: 0 4px 0 0; overflow-y: auto; flex: 1; scrollbar-width: thin; scrollbar-color: #234 transparent; }
+  li { display: grid; grid-template-columns: 30px 1fr 22px; gap: 8px; align-items: center; padding: 7px 8px; border-radius: 8px; border: 1px solid transparent; transition: background .15s; }
+  li:hover { background: rgba(94, 230, 255, .07); }
+  li.sel { border-color: var(--accent); background: rgba(94, 230, 255, .1); }
+  li.done .t { color: var(--muted); text-decoration: line-through rgba(77,255,154,.5); }
+  li .num { font: 700 11px Orbitron, sans-serif; color: var(--muted); }
+  li .t { font-size: 13px; }
+  li .m { font-size: 11px; color: var(--muted); }
+  li .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+  .chk { width: 20px; height: 20px; border-radius: 6px; border: 1px solid var(--line); background: none; padding: 0; font-size: 12px; color: var(--loki); }
+
+  #detail { top: 76px; right: 16px; width: 360px; max-height: calc(100% - 160px); overflow-y: auto; padding: 18px; opacity: 0; pointer-events: none;
+    transform: perspective(1100px) rotateY(calc(var(--mx) * 4deg)) rotateX(calc(var(--my) * -3deg)); transform-origin: right center; }
+  #detail.open { opacity: 1; pointer-events: auto; }
+  #detail h2 { margin: 4px 0 6px; font-size: 18px; line-height: 1.25; }
+  #detail .kicker { font: 700 11px Orbitron, sans-serif; color: var(--accent); letter-spacing: .14em; }
+  #detail .meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+  .tag { font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .tag.warn { border-color: rgba(245,196,81,.5); color: var(--gold); }
+  #detail p { color: #c7d6ee; margin: 8px 0; }
+  #detail h3 { font-size: 11px; color: var(--muted); margin: 16px 0 6px; letter-spacing: .14em; }
+  .cross { font-size: 12.5px; padding: 8px 10px; border-left: 2px solid #ff5fa2; background: rgba(255, 95, 162, .06); border-radius: 0 8px 8px 0; margin-bottom: 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 11.5px; padding: 5px 10px; }
+  .close { position: absolute; top: 10px; right: 10px; background: none; border: 0; color: var(--muted); font-size: 18px; }
+  .watch { margin-top: 12px; width: 100%; padding: 10px; border-radius: 10px; border: 1px solid rgba(77,255,154,.4); background: rgba(77,255,154,.08); color: var(--loki); font-weight: 600; }
+
+  #legend { left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 14px; padding: 8px 16px; font-size: 11px; color: var(--muted); border-radius: 999px; white-space: nowrap; }
+  #legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--c); box-shadow: 0 0 8px var(--c); }
+  #legal { position: fixed; right: 16px; bottom: 16px; z-index: 5; max-width: 260px; font-size: 10px; color: #5d6f8c; text-align: right; }
+
+  .elabel { pointer-events: auto; text-align: center; transform: translateY(-34px); }
+  .elabel b { display: block; font: 700 12px Orbitron, sans-serif; letter-spacing: .1em; text-shadow: 0 0 12px currentColor; }
+  .elabel small { color: var(--muted); font-size: 10.5px; }
+  body.far .elabel small { display: none; }
+  .tier { font: 600 10px Orbitron, sans-serif; letter-spacing: .22em; color: rgba(140,180,255,.55); white-space: nowrap; }
+  .plabel b { font-size: 11px; } .plabel small { font-size: 10px; }
+  .hero { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; border-radius: 999px; background: rgba(4,8,20,.78); border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); white-space: nowrap; pointer-events: none; transition: opacity .3s; }
+  .av { position: relative; width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center; overflow: hidden; font: 700 11px Orbitron, sans-serif; color: #fff;
+    background: radial-gradient(circle at 30% 28%, color-mix(in srgb, var(--c) 75%, white), color-mix(in srgb, var(--c) 30%, #050a18)); border: 1.5px solid var(--c); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 55%, transparent); }
+  .av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .av.dead { filter: grayscale(1) brightness(.7); }
+  .hrow .av { width: 44px; height: 44px; font-size: 13px; }
+  .hhead { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .st { font-size: 9.5px; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; }
+  .st.alive { color: #7dffb0; } .st.dead { color: #ff8a8a; } .st.captive { color: #f5c451; } .st.unknown { color: #9fb3d1; }
+  .hero b, .hrow b { display: block; font-size: 11px; font-weight: 600; }
+  .hero small, .hrow small { display: block; font-size: 10px; color: var(--muted); }
+  .hrow { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(120,200,255,.08); }
+  .art { display: block; width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 10px; margin-bottom: 12px; border: 1px solid var(--line); }
+  .tlabel { font-size: 10.5px; color: #d9e8ff; background: rgba(4,8,20,.6); border: 1px solid var(--line); padding: 2px 7px; border-radius: 6px; white-space: nowrap; transform: translate(14px, 0); pointer-events: none; }
+  .ylabel { font: 700 10px Orbitron, sans-serif; color: var(--gold); opacity: .8; pointer-events: none; }
+  .loki { font: 900 13px Orbitron, sans-serif; color: var(--loki); text-align: center; text-shadow: 0 0 18px var(--loki); letter-spacing: .2em; pointer-events: none; }
+  .loki small { display: block; font: 500 10.5px Inter, sans-serif; letter-spacing: .04em; color: #b9ffd6; text-shadow: none; }
+
+  #tip { position: fixed; z-index: 9; pointer-events: none; padding: 6px 10px; border-radius: 8px; background: rgba(4,8,20,.85); border: 1px solid var(--accent);
+    font-size: 12px; opacity: 0; transition: opacity .15s; white-space: nowrap; }
+  #cur-dot, #cur-ring { position: fixed; left: 0; top: 0; z-index: 10; pointer-events: none; border-radius: 50%; display: none; will-change: transform; }
+  body.fine #cur-dot, body.fine #cur-ring { display: block; }
+  #cur-dot { width: 6px; height: 6px; background: #fff; box-shadow: 0 0 10px var(--accent), 0 0 20px var(--accent); }
+  #cur-ring { width: 38px; height: 38px; border: 1.5px solid rgba(94,230,255,.8); box-shadow: 0 0 18px rgba(94,230,255,.4), inset 0 0 12px rgba(94,230,255,.25); transition: border-color .2s, width .25s, height .25s; }
+  #cur-ring::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 1px dashed rgba(77,255,154,.55); animation: spin 6s linear infinite; }
+  #cur-ring.on { width: 58px; height: 58px; border-color: var(--gold); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #intro { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; text-align: center; pointer-events: none; transition: opacity 1.4s; }
+  #intro h1 { font-size: clamp(28px, 6vw, 64px); margin: 0; font-weight: 900; letter-spacing: .18em;
+    background: linear-gradient(90deg, var(--loki), var(--accent), var(--gold)); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 24px rgba(94,230,255,.35)); }
+  #intro p { color: var(--muted); letter-spacing: .3em; font-size: 12px; text-transform: uppercase; }
+  #menu { display: none; }
+  #err { position: fixed; inset: 0; display: none; place-items: center; z-index: 30; padding: 24px; text-align: center; color: var(--muted); }
+
+  @media (max-width: 860px) {
+    #list { left: 0; right: 0; top: auto; bottom: 0; width: auto; height: 55%; border-radius: 16px 16px 0 0; transform: translateY(105%); transition: transform .4s; }
+    #list.show { transform: none; }
+    #menu { display: block; position: fixed; z-index: 6; left: 16px; top: 64px; }
+    #top { top: 12px; max-width: calc(100% - 32px); overflow-x: auto; }
+    #detail { left: 16px; right: 16px; width: auto; top: auto; bottom: 16px; max-height: 50%; transform: none; }
+    #legend, #legal { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { #cur-ring::after { animation: none; } }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<nav id="top" class="hud">
+  <button data-go="overview">Overview</button>
+  <button data-go="616">Earth-616</button>
+  <button data-go="tree">Loki's Tree</button>
+  <button data-go="tva">TVA</button>
+  <button class="doom" data-go="doomsday">Doomsday</button>
+</nav>
+<button id="menu" class="hud chip">☰ Watch list</button>
+
+<aside id="list" class="hud">
+  <h1>MULTIVERSE ATLAS</h1>
+  <div class="sub">Every title on the road to Avengers: Doomsday</div>
+  <div class="controls">
+    <input id="q" type="search" placeholder="Search titles and events…" aria-label="Search">
+    <select id="earth" aria-label="Filter by Earth"><option value="">All realities</option></select>
+    <div class="seg" role="group" aria-label="Sort order">
+      <button data-order="release" class="on">Release</button>
+      <button data-order="chrono">In-universe</button>
+    </div>
+  </div>
+  <div class="progress"><i id="bar"></i></div>
+  <div class="ptext" id="ptext"></div>
+  <ol id="rows"></ol>
+</aside>
+
+<section id="detail" class="hud" aria-live="polite"></section>
+
+<div id="legend" class="hud">
+  <span style="--c:#ffd56b">Film</span><span style="--c:#5ee6ff">Series</span><span style="--c:#7dffb0">Animated</span>
+  <span style="--c:#c58cff">Special</span><span style="--c:#ffffff">One-shot</span>
+  <span style="--c:#4dff9a">Branch held by Loki</span><span style="--c:#ff5fa2">Reality crossing</span><span style="--c:#ff3b3b">Doomsday</span>
+</div>
+<div id="legal">Unofficial fan-made guide. Not affiliated with or endorsed by Marvel Studios or The Walt Disney Company. Titles and character names belong to their owners.</div>
+
+<div id="tip"></div>
+<div id="cur-ring"></div><div id="cur-dot"></div>
+<div id="intro"><div><h1>MULTIVERSE ATLAS</h1><p>Road to Doomsday · scroll to zoom · drag to orbit</p></div></div>
+<div id="err">WebGL isn't available in this browser, so the 3D map can't be drawn. Try a recent Chrome, Edge, Safari or Firefox.</div>
+
+<script src="data.js"></script>
+<script src="planets.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { buildPlanets } from './planet-models.js';
+
+const { EARTHS, TITLES, COLLISIONS } = window.MULTIVERSE;
+const $ = s => document.querySelector(s);
+const D2R = Math.PI / 180;
+const LOKI = '#4dff9a', GOLD = '#f5c451', CROSS = '#ff5fa2', DOOM = '#ff3b3b';
+const KIND = { film: ['#ffd56b', 'Film'], series: ['#5ee6ff', 'Series'], oneshot: ['#ffffff', 'One-shot'], special: ['#c58cff', 'Special'], animated: ['#7dffb0', 'Animated'], doom: [DOOM, 'Film · Destination'] };
+const LABEL_NEAR = 9; // year labels and heroes appear within (planet size × this + 40) of an Earth
+const TITLE_NEAR = 38; // each title's own label appears only when the camera is this close to it
+
+const titles = TITLES.map(([n, t, d, y, e, k, note, tbc]) => ({ n, t, d, y, e, k, note, tbc: !!tbc }));
+const earthById = Object.fromEntries(EARTHS.map(e => [e.id, e]));
+const earthPos = e => new THREE.Vector3(Math.cos(e.angle * D2R) * e.orbit, e.y, Math.sin(e.angle * D2R) * e.orbit);
+const yearText = y => (y < 0 ? `${-y} BC` : String(y));
+
+// ---------- watched state (per-viewer convenience only) ----------
+const store = {
+  load() { try { return new Set(JSON.parse(localStorage.getItem('mv-watched') || '[]')); } catch { return new Set(); } },
+  save(s) { try { localStorage.setItem('mv-watched', JSON.stringify([...s])); } catch { /* private mode: keep in memory */ } }
+};
+let watched = store.load();
+
+// ---------- renderer ----------
+let renderer;
+try { renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }); }
+catch { $('#err').style.display = 'grid'; throw new Error('WebGL unavailable'); }
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+$('#stage').appendChild(renderer.domElement);
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(innerWidth, innerHeight);
+labelRenderer.domElement.className = 'labels';
+document.body.insertBefore(labelRenderer.domElement, $('#top'));
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x02030a, 0.00022);
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 8000);
+camera.position.set(0, 1500, 3400);
+const controls = new OrbitControls(camera, labelRenderer.domElement);
+Object.assign(controls, { enableDamping: true, dampingFactor: 0.06, zoomToCursor: true, minDistance: 3, maxDistance: 2800, rotateSpeed: 0.6, zoomSpeed: 1.1 });
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.9, 0.5, 0.62);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+// Loki's tree is the only "sun": every planet's day side faces the centre of the multiverse.
+scene.add(new THREE.AmbientLight(0x3a4a66, 0.35));
+const treeLight = new THREE.PointLight(0xfff4e0, 3.2, 0, 0); scene.add(treeLight);
+const texLoader = new THREE.TextureLoader();
+const tex = (file, srgb = true) => {
+  const t = texLoader.load(`assets/textures/${file}`);
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+};
+const TEX = {
+  day: tex('earth_atmos_2048.jpg'), night: tex('earth_lights_2048.png'), spec: tex('earth_specular_2048.jpg', false),
+  clouds: tex('earth_clouds_1024.png'), rock: tex('moon_1024.jpg')
+};
+scene.background = new THREE.CubeTextureLoader().setPath('assets/textures/')
+  .load(['sky_px.jpg', 'sky_nx.jpg', 'sky_py.jpg', 'sky_ny.jpg', 'sky_pz.jpg', 'sky_nz.jpg'], t => { t.colorSpace = THREE.SRGBColorSpace; });
+
+// ---------- shared materials ----------
+const glow = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.22, 'rgba(255,255,255,.55)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r; g.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
+})();
+const time = { value: 0 };
+const flowMat = (color, opacity = 0.9, speed = 0.25) => new THREE.ShaderMaterial({
+  uniforms: { time, c: { value: new THREE.Color(color) }, o: { value: opacity }, s: { value: speed } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
+  fragmentShader: `uniform float time, o, s; uniform vec3 c; varying vec2 vUv;
+    void main(){ float p = fract(vUv.x * 5. - time * s); float pulse = smoothstep(0., .06, p) * smoothstep(.3, .06, p);
+      gl_FragColor = vec4(c * (.55 + pulse * 2.2), (.22 + pulse * .9) * o); }`,
+  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
+});
+const atmoMat = color => new THREE.ShaderMaterial({
+  uniforms: { c: { value: new THREE.Color(color) }, o: { value: 1 } },
+  vertexShader: 'varying vec3 vN, vV; void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+  fragmentShader: 'uniform vec3 c; uniform float o; varying vec3 vN, vV; void main(){ float f = pow(1. - abs(dot(vN, vV)), 2.6) * o; gl_FragColor = vec4(c * f * 1.8, f); }',
+  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
+});
+const tube = (points, radius, mat, seg = 140) =>
+  new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), seg, radius, 8, false), mat);
+const sprite = (color, scale, opacity = 1) => {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow, color, opacity, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  s.scale.setScalar(scale); return s;
+};
+const label = (cls, main, sub) => {
+  const el = document.createElement('div'); el.className = cls;
+  const b = document.createElement('b'); b.textContent = main; el.append(b);
+  if (sub) { const s = document.createElement('small'); s.textContent = sub; el.append(s); }
+  return new CSS2DObject(el);
+};
+
+// ---------- reality focus: objects tagged with the realities they belong to fade when another is selected ----------
+const FADED = 0.1;
+const dimmables = [];
+const realm = (obj, realities) => { obj.userData.dim = { realities, f: 1, target: 1 }; dimmables.push(obj); return obj; };
+function applyFade(obj, f) {
+  obj.traverse(o => {
+    if (o.isCSS2DObject) { o.element.style.opacity = f; return; }
+    if (!o.material) return;
+    [].concat(o.material).forEach(m => fadeMaterial(m, f));
+  });
+}
+function fadeMaterial(m, f) {
+  const u = m.uniforms;
+  if (u?.fade) { u.fade.value = f; return; }
+  if (u?.o) { m.userData.base ??= u.o.value; u.o.value = m.userData.base * f; return; }
+  m.userData.base ??= m.opacity;
+  if (!m.transparent) { m.transparent = true; m.needsUpdate = true; }
+  m.opacity = m.userData.base * f;
+}
+
+// ---------- deep space ----------
+function stars(count, rMin, rMax, size) {
+  const pos = new Float32Array(count * 3), col = new Float32Array(count * 3), c = new THREE.Color();
+  for (let i = 0; i < count; i++) {
+    const r = rMin + Math.random() * (rMax - rMin), u = Math.random() * 2 - 1, th = Math.random() * Math.PI * 2, s = Math.sqrt(1 - u * u);
+    pos.set([r * s * Math.cos(th), r * u, r * s * Math.sin(th)], i * 3);
+    c.setHSL(0.5 + Math.random() * 0.2, 0.7, 0.55 + Math.random() * 0.45); col.set([c.r, c.g, c.b], i * 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return new THREE.Points(g, new THREE.PointsMaterial({ size, map: glow, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+}
+const starfield = [stars(7000, 3000, 5200, 9), stars(3500, 1300, 3000, 4), stars(2500, 200, 1300, 1.6)];
+starfield.forEach(s => scene.add(s));
+[['#3a1d7a', -900, 200, -1500], ['#0d4f6b', 1200, -300, -900], ['#1d6b3a', -300, 500, 1300], ['#6b1d4f', 900, 400, 900]]
+  .forEach(([c, x, y, z]) => { const s = sprite(c, 3600, 0.14); s.position.set(x * 2.2, y * 2.2, z * 2.2); s.material.fog = false; scene.add(s); });
+
+// ---------- Loki's World Tree: every branch of time is held at the centre ----------
+function buildTree() {
+  const g = new THREE.Group();
+  const trunk = []; for (let i = 0; i <= 12; i++) trunk.push(new THREE.Vector3(Math.sin(i * 0.9) * 1.4, -48 + i * 8, Math.cos(i * 0.7) * 1.4));
+  g.add(tube(trunk, 1.8, flowMat(LOKI, 1, 0.12)));
+  const coil = []; for (let i = 0; i <= 160; i++) coil.push(new THREE.Vector3(Math.cos(i * 0.35) * 3.6, -48 + i * 0.6, Math.sin(i * 0.35) * 3.6));
+  g.add(tube(coil, 0.25, flowMat(GOLD, 0.8, 0.3), 400));
+  for (const side of [-1, 1]) // the horned crown of the God of Stories
+    g.add(tube([[0.8, 48, 0], [3.5, 51, 0], [6, 57, 0], [5, 64, 0], [2.5, 68, 0]].map(([x, y, z]) => new THREE.Vector3(x * side, y, z)), 0.55, flowMat(GOLD, 1, 0.2)));
+  g.add(sprite(LOKI, 38, 0.22));
+  const crown = sprite(GOLD, 28, 0.7); crown.position.y = 52; g.add(crown);
+  EARTHS.forEach((e, i) => {
+    const p = earthPos(e), start = new THREE.Vector3(0, -30 + (i % 9) * 7, 0);
+    const mid = start.clone().lerp(p, 0.5).add(new THREE.Vector3(0, 14 + (i % 3) * 6, 0));
+    g.add(realm(tube([start, mid, p], 0.32, flowMat(i % 2 ? GOLD : LOKI, 0.75, 0.18)), [e.id]));
+  });
+  for (let i = 0; i < 48; i++) { // unnamed branches: the infinite stories not yet told
+    const dir = new THREE.Vector3(Math.random() - 0.5, (Math.random() - 0.5) * 0.6, Math.random() - 0.5).normalize();
+    const len = 90 + Math.random() * 260, start = new THREE.Vector3(0, -40 + Math.random() * 80, 0);
+    const mid = start.clone().addScaledVector(dir, len * 0.5).add(new THREE.Vector3(0, (Math.random() - 0.5) * 40, 0));
+    g.add(realm(tube([start, mid, start.clone().addScaledVector(dir, len)], 0.12, flowMat(Math.random() > 0.5 ? LOKI : GOLD, 0.28, 0.1 + Math.random() * 0.2), 60), []));
+  }
+  const tag = label('loki', 'LOKI', 'God of Stories — holding every timeline');
+  tag.position.y = 76; g.add(tag);
+  scene.add(g);
+}
+buildTree();
+
+// ---------- Earths: real Earth imagery with a day/night terminator lit from Loki's tree ----------
+const earthMat = tint => new THREE.ShaderMaterial({
+  uniforms: { day: { value: TEX.day }, night: { value: TEX.night }, spec: { value: TEX.spec }, tint: { value: tint }, sunPos: { value: treeLight.position }, fade: { value: 1 } },
+  vertexShader: `varying vec2 vUv; varying vec3 vN, vP;
+    void main(){ vUv = uv; vN = normalize(mat3(modelMatrix) * normal); vec4 wp = modelMatrix * vec4(position, 1.); vP = wp.xyz; gl_Position = projectionMatrix * viewMatrix * wp; }`,
+  fragmentShader: `uniform sampler2D day, night, spec; uniform vec3 tint, sunPos; uniform float fade; varying vec2 vUv; varying vec3 vN, vP;
+    void main(){
+      vec3 N = normalize(vN), L = normalize(sunPos - vP), V = normalize(cameraPosition - vP);
+      float d = dot(N, L), lit = smoothstep(-0.12, 0.22, d);
+      vec3 col = texture2D(day, vUv).rgb * tint * (0.03 + max(d, 0.) * 1.35);
+      col += pow(max(dot(N, normalize(L + V)), 0.), 48.) * texture2D(spec, vUv).r * 0.55 * lit;   // ocean glint
+      col += texture2D(night, vUv).rgb * vec3(1., .78, .5) * 1.6 * (1. - lit);                  // city lights
+      gl_FragColor = vec4(mix(vec3(dot(col, vec3(.3, .59, .11))) * .3, col, fade), 1.);
+    }`
+});
+function quantumTexture(hex) {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 512;
+  const g = c.getContext('2d'), base = new THREE.Color(hex);
+  g.fillStyle = `#${base.clone().multiplyScalar(0.25).getHexString()}`; g.fillRect(0, 0, 1024, 512);
+  for (let i = 0; i < 320; i++) {
+    const col = base.clone().offsetHSL((Math.random() - 0.5) * 0.2, 0, (Math.random() - 0.35) * 0.35);
+    g.globalAlpha = 0.2 + Math.random() * 0.4; g.fillStyle = `#${col.getHexString()}`;
+    g.beginPath(); g.ellipse(Math.random() * 1024, Math.random() * 512, 6 + Math.random() * 80, 3 + Math.random() * 20, Math.random() * Math.PI, 0, Math.PI * 2); g.fill();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function planetMaterial(e) {
+  const tint = new THREE.Color('#ffffff').lerp(new THREE.Color(e.color), e.id === '616' ? 0 : 0.35);
+  if (e.fake) return new THREE.MeshBasicMaterial({ color: e.color, wireframe: true, transparent: true, opacity: 0.55 });
+  if (e.look === 'rock') return new THREE.MeshStandardMaterial({ map: TEX.rock, color: tint, roughness: 1, metalness: 0, emissive: new THREE.Color(e.color), emissiveIntensity: e.id === 'incursion' ? 0.35 : 0.03 });
+  if (e.look === 'quantum') return new THREE.MeshStandardMaterial({ map: quantumTexture(e.color), roughness: 0.4, metalness: 0.3, emissive: new THREE.Color(e.color), emissiveIntensity: 0.25 });
+  return earthMat(tint);
+}
+const earthMeshes = [], spinners = [], clouds = [], glowByEarth = {};
+const sphereGeo = new THREE.SphereGeometry(1, 128, 96);
+EARTHS.forEach(e => {
+  const g = new THREE.Group(); g.position.copy(earthPos(e));
+  g.rotation.z = 0.41; // 23.4° axial tilt
+  const body = new THREE.Mesh(sphereGeo, planetMaterial(e)); body.scale.setScalar(e.size);
+  body.userData.earth = e; g.add(body); earthMeshes.push(body); spinners.push(body);
+  if (!e.fake && (e.look ?? 'earth') === 'earth') {
+    const cl = new THREE.Mesh(sphereGeo, new THREE.MeshLambertMaterial({ map: TEX.clouds, transparent: true, opacity: 0.85, depthWrite: false }));
+    cl.scale.setScalar(e.size * 1.012); g.add(cl); clouds.push(cl);
+  }
+  const atmo = new THREE.Mesh(sphereGeo, atmoMat(e.look ? e.color : new THREE.Color('#6fb4ff').lerp(new THREE.Color(e.color), 0.4)));
+  atmo.scale.setScalar(e.size * 1.08); g.add(atmo);
+  const tag = label('elabel', e.name, e.sub); tag.position.y = e.size + 2; tag.element.style.color = e.color;
+  tag.element.addEventListener('click', () => focusEarth(e)); g.add(tag);
+  const glowSprite = sprite(e.color, e.size * 3.6, 0); g.add(glowSprite); glowByEarth[e.id] = glowSprite;
+  scene.add(realm(g, [e.id]));
+});
+// tier rings: outside time → Sacred Timeline → alternate Earths → What If
+(window.MULTIVERSE.TIERS || []).forEach(t => {
+  const on = EARTHS.filter(e => e.orbit === t.r).map(e => e.id);
+  const ring = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 256 }, (_, i) => new THREE.Vector3(Math.cos(i / 256 * Math.PI * 2) * t.r, 0, Math.sin(i / 256 * Math.PI * 2) * t.r))),
+    new THREE.LineBasicMaterial({ color: 0x3a6aa8, transparent: true, opacity: 0.28 }));
+  const tag = label('tier', t.name); tag.position.set(0, 0, t.r + 4);
+  ring.add(tag); scene.add(realm(ring, on));
+});
+
+// Labels, titles and heroes near an Earth only appear once the camera is close to it.
+const labelSetById = Object.fromEntries(EARTHS.map(e => [e.id, { center: earthPos(e), near: e.size * LABEL_NEAR + 40, labels: [], shown: false }]));
+const labelSets = Object.values(labelSetById);
+
+// ---------- heroes and villains: where everyone is right now ----------
+const SIDE = { hero: ['#5ee6ff', 'Hero'], antihero: ['#f5c451', 'Antihero'], villain: ['#ff4d5e', 'Villain'] };
+const STATUS = { alive: 'Alive', dead: 'Deceased', captive: 'Captive', unknown: 'Unknown' };
+const CHAR_NEAR = 50; // a chip shows when the camera is within (its ring radius + this)
+const chars = (window.MULTIVERSE.CHARACTERS || []).map(([id, name, actor, e, side, status, where, tbc]) => ({ id, name, actor, e, side, status, where, tbc: !!tbc }));
+const initials = name => name.replace(/\(.*?\)/g, '').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+function avatar(c) { // initials badge; a licensed portrait in assets/characters/<id>.png covers it when present
+  const d = document.createElement('div'); d.className = `av ${c.status}`; d.style.setProperty('--c', SIDE[c.side][0]); d.textContent = initials(c.name);
+  const img = document.createElement('img'); img.alt = ''; img.src = `assets/characters/${c.id}.png`; img.onerror = () => img.remove(); d.append(img);
+  return d;
+}
+const nearLabels = [], charRingR = {};
+EARTHS.forEach(e => {
+  const center = earthPos(e);
+  [chars.filter(c => c.e === e.id && c.side !== 'villain'), chars.filter(c => c.e === e.id && c.side === 'villain')].forEach((list, ring) => {
+    const R = e.size * 3.4 + 10 + list.length * 0.45 + ring * 8;
+    if (list.length) charRingR[e.id] = Math.max(charRingR[e.id] || 0, R);
+    list.forEach((c, i) => {
+      const a = (i / list.length) * Math.PI * 2 + ring * 0.4;
+      const chip = document.createElement('div'); chip.className = 'hero'; chip.style.setProperty('--c', SIDE[c.side][0]);
+      const txt = document.createElement('div'), b = document.createElement('b'), sm = document.createElement('small');
+      b.textContent = c.name; sm.textContent = `${c.actor} · ${STATUS[c.status]}`;
+      txt.append(b, sm); chip.append(avatar(c), txt);
+      const o = new CSS2DObject(chip); o.position.copy(center).add(new THREE.Vector3(Math.cos(a) * R, 4 - ring * 10, Math.sin(a) * R));
+      o.visible = false; o.userData.near = R + CHAR_NEAR; scene.add(realm(o, [e.id])); nearLabels.push(o);
+    });
+  });
+});
+
+// ---------- titles on a helix around their Earth, ordered by in-universe year ----------
+const nodeByN = new Map(), nodeMeshes = [];
+const nodeGeo = new THREE.SphereGeometry(0.6, 20, 14);
+let doomPos;
+EARTHS.forEach(e => {
+  const list = titles.filter(t => t.e === e.id && t.k !== 'doom').sort((a, b) => a.y - b.y || a.n - b.n);
+  if (!list.length) return;
+  const center = earthPos(e), N = list.length, R = e.size * 1.9 + 5, H = Math.max(8, N * 0.78);
+  const pts = [], labels = labelSetById[e.id].labels;
+  let lastYear = null;
+  list.forEach((t, i) => {
+    const a = i * 0.62, h = N > 1 ? -H / 2 + (H * i) / (N - 1) : 0;
+    const p = center.clone().add(new THREE.Vector3(Math.cos(a) * R, h, Math.sin(a) * R));
+    const m = new THREE.Mesh(nodeGeo, new THREE.MeshBasicMaterial({ color: KIND[t.k][0], transparent: true }));
+    m.position.copy(p); m.userData.title = t; scene.add(realm(m, [e.id])); nodeMeshes.push(m); nodeByN.set(t.n, m); pts.push(p);
+    const halo = sprite(KIND[t.k][0], 4, 0.6); halo.position.copy(p); scene.add(realm(halo, [e.id])); m.userData.halo = halo;
+    const tl = label('tlabel', `${t.n} · ${t.t}`); tl.position.copy(p); tl.visible = false; tl.userData.near = TITLE_NEAR; scene.add(realm(tl, [e.id])); nearLabels.push(tl);
+    if (t.y !== lastYear) {
+      const yl = label('ylabel', yearText(t.y)); yl.position.copy(center.clone().add(new THREE.Vector3(Math.cos(a) * (R + 4), h, Math.sin(a) * (R + 4))));
+      yl.visible = false; scene.add(realm(yl, [e.id])); labels.push(yl); lastYear = t.y;
+    }
+  });
+  if (N > 1) scene.add(realm(tube(pts, 0.09, flowMat('#9fe6ff', 0.55, 0.35), N * 12), [e.id]));
+  if (e.id === '616') doomPos = center.clone().add(new THREE.Vector3(0, H / 2 + 22, 0));
+});
+
+// ---------- Doomsday: the convergence point ----------
+const doomTitle = titles.find(t => t.k === 'doom');
+const doom = new THREE.Group(); doom.position.copy(doomPos);
+const doomCore = new THREE.Mesh(new THREE.IcosahedronGeometry(2.6, 1), new THREE.MeshBasicMaterial({ color: DOOM, wireframe: true }));
+doomCore.userData.title = doomTitle; doom.add(doomCore, sprite(DOOM, 26, 0.9));
+const doomShell = new THREE.Mesh(new THREE.IcosahedronGeometry(4.4, 0), new THREE.MeshBasicMaterial({ color: '#ff8a3b', wireframe: true, transparent: true, opacity: 0.45 }));
+doom.add(doomShell);
+const doomTag = label('elabel', 'AVENGERS: DOOMSDAY', 'Dec 2026 · where universes collide'); doomTag.position.y = 7; doomTag.element.style.color = DOOM;
+doomTag.element.addEventListener('click', () => selectTitle(doomTitle)); doom.add(doomTag);
+scene.add(realm(doom, ['616', ...COLLISIONS.filter(c => c.to === 'doomsday').map(c => c.from)])); nodeMeshes.push(doomCore); nodeByN.set(doomTitle.n, doomCore);
+
+// ---------- crossings between realities ----------
+const endPos = id => (id === 'doomsday' ? doomPos.clone() : earthPos(earthById[id]));
+COLLISIONS.forEach((c, i) => {
+  const a = endPos(c.from), b = endPos(c.to), mid = a.clone().lerp(b, 0.5);
+  mid.y += a.distanceTo(b) * 0.32 + 8 + (i % 3) * 4;
+  const color = c.to === 'doomsday' ? DOOM : c.fake ? '#8affc1' : CROSS;
+  scene.add(realm(tube([a, mid, b], c.to === 'doomsday' ? 0.45 : 0.28, flowMat(color, c.fake ? 0.4 : 0.95, 0.55)), [c.from, c.to === 'doomsday' ? '616' : c.to]));
+});
+
+// ---------- Earth-616's worlds, in the same universe as the multiverse ----------
+const EARTH_616 = earthPos(earthById['616']);
+const PLANET_LABEL_NEAR = 560; // planet names show once the camera is this close to Earth-616
+const worlds = buildPlanets({ center: EARTH_616, glow, sprite, label, atmoMat, flowMat, tube, TEX, sphereGeo, GOLD, time,
+  anisotropy: renderer.capabilities.getMaxAnisotropy(), onPick: p => showPlace(p) });
+scene.add(realm(worlds.group, ['616']));
+const worldLabels = { near: false };
+worlds.labels.forEach(l => { l.visible = false; });
+
+// ---------- selection & camera flights ----------
+const selRing = sprite('#ffffff', 7, 0); scene.add(selRing);
+let flight = null, selected = null;
+function flyTo(target, dist, dir, dur = 1700) {
+  const d = (dir || camera.position.clone().sub(controls.target)).clone().normalize();
+  if (!dir && d.y < 0.15) { d.y = 0.3; d.normalize(); }
+  flight = { t0: performance.now(), dur, fromPos: camera.position.clone(), fromTgt: controls.target.clone(), toTgt: target.clone(), toPos: target.clone().addScaledVector(d, dist), lift: Math.min(140, camera.position.distanceTo(target) * 0.25) };
+}
+controls.addEventListener('start', () => { flight = null; });
+const ease = k => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+
+function selectTitle(t) {
+  selected = t;
+  const m = nodeByN.get(t.n);
+  flyTo(m.position, t.k === 'doom' ? 40 : 16);
+  selRing.position.copy(m.position); selRing.material.opacity = 1;
+  showTitle(t); renderList(false);
+}
+let focusId = '';
+function setFocus(id) { // '' = all realities at full strength
+  if (glowByEarth[focusId]) glowByEarth[focusId].material.opacity = 0;
+  focusId = id;
+  dimmables.forEach(o => { o.userData.dim.target = !id || o.userData.dim.realities.includes(id) ? 1 : FADED; });
+}
+function focusEarth(e) { earthSel.value = e.id; setFocus(e.id); selected = null; selRing.material.opacity = 0; // view from a low angle so the hero/villain rings frame the planet
+  const p = earthPos(e), d = camera.position.clone().sub(p); d.y = 0;
+  if (d.lengthSq() < 1) d.set(0, 0, 1);
+  d.normalize().setY(0.42);
+  flyTo(p, Math.max(e.size * 7 + 36, (charRingR[e.id] || 0) * 2.1), d); showEarth(e); renderList(false); }
+const OVERVIEW_DIR = new THREE.Vector3(0, 0.55, 1), OVERVIEW_DIST = 1500;
+const goOverview = () => { earthSel.value = ''; setFocus(''); flyTo(new THREE.Vector3(0, 0, 0), OVERVIEW_DIST, OVERVIEW_DIR, 2000); closeDetail(); };
+
+// ---------- detail card ----------
+const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+const detail = $('#detail');
+const closeDetail = () => { detail.classList.remove('open'); selected = null; selRing.material.opacity = 0; renderList(false); };
+function chip(text, onClick) { const b = el('button', 'chip', text); b.onclick = onClick; return b; }
+
+function showTitle(t) {
+  const e = earthById[t.e];
+  const close = el('button', 'close', '×'); close.onclick = closeDetail; close.setAttribute('aria-label', 'Close');
+  const meta = el('div', 'meta');
+  meta.append(el('span', 'tag', KIND[t.k][1]), el('span', 'tag', `Released ${t.d}`), el('span', 'tag', `Set ~${yearText(t.y)}`));
+  if (t.tbc) meta.append(el('span', 'tag warn', 'Details to verify'));
+  const crossings = COLLISIONS.filter(c => c.n === t.n);
+  const watch = el('button', 'watch', watched.has(t.n) ? '✓ Watched' : 'Mark as watched');
+  watch.onclick = () => { toggleWatched(t.n); showTitle(t); };
+  const earthChip = chip(`${e.name} — ${e.sub}`, () => focusEarth(e));
+  // key art is optional: drop assets/art/001.jpg … 101.jpg and it appears here
+  const art = el('img', 'art'); art.alt = t.t; art.src = `assets/art/${String(t.n).padStart(3, '0')}.jpg`; art.onerror = () => art.remove();
+  detail.replaceChildren(close, art, el('div', 'kicker', `#${t.n} OF ${titles.length}`), el('h2', null, t.t), meta, el('p', null, t.note), el('h3', null, 'REALITY'), earthChip);
+  if (crossings.length) {
+    detail.append(el('h3', null, 'REALITY CROSSINGS'));
+    crossings.forEach(c => detail.append(el('div', 'cross', `${c.from === 'doomsday' ? 'Doomsday' : earthById[c.from].name} → ${c.to === 'doomsday' ? 'Doomsday' : earthById[c.to].name}: ${c.label}`)));
+  }
+  detail.append(watch); detail.classList.add('open'); detail.scrollTop = 0;
+}
+function showEarth(e) {
+  const close = el('button', 'close', '×'); close.onclick = closeDetail; close.setAttribute('aria-label', 'Close');
+  const ns = new Set([...titles.filter(t => t.e === e.id).map(t => t.n), ...COLLISIONS.filter(c => c.from === e.id || c.to === e.id).map(c => c.n)]);
+  const chips = el('div', 'chips');
+  [...ns].sort((a, b) => a - b).forEach(n => { const t = titles.find(x => x.n === n); chips.append(chip(`${n} · ${t.t}`, () => selectTitle(t))); });
+  detail.replaceChildren(close, el('div', 'kicker', 'REALITY'), el('h2', null, e.name), el('div', 'meta'), el('p', null, e.desc), el('h3', null, `TITLES TOUCHING THIS REALITY (${ns.size})`), chips);
+  detail.querySelector('.meta').append(el('span', 'tag', e.sub));
+  const here = chars.filter(c => c.e === e.id);
+  [['HEROES & ALLIES', c => c.status !== 'dead' && c.side !== 'villain'], ['VILLAINS', c => c.status !== 'dead' && c.side === 'villain'], ['FALLEN', c => c.status === 'dead']]
+    .forEach(([title, keep]) => {
+      const group = here.filter(keep); if (!group.length) return;
+      detail.append(el('h3', null, `${title} (${group.length})`));
+      group.forEach(c => {
+        const row = el('div', 'hrow'), txt = el('div'), head = el('div', 'hhead');
+        const st = el('span', `st ${c.status}`, STATUS[c.status]);
+        head.append(el('b', null, c.name), st);
+        txt.append(head, el('small', null, `${c.actor} — ${c.where}${c.tbc ? ' (to verify)' : ''}`));
+        row.append(avatar(c), txt); detail.append(row);
+      });
+    });
+  detail.classList.add('open'); detail.scrollTop = 0;
+}
+
+function showPlace(p) {
+  const close = el('button', 'close', '×'); close.onclick = closeDetail; close.setAttribute('aria-label', 'Close');
+  const meta = el('div', 'meta'); meta.append(el('span', 'tag', p.regionName));
+  const h = el('h2', null, p.name); h.style.color = p.color;
+  detail.replaceChildren(close, el('div', 'kicker', 'A WORLD OF EARTH-616'), h, meta, el('p', null, p.note));
+  detail.classList.add('open'); detail.scrollTop = 0;
+  const m = worlds.meshes.find(x => x.userData.place === p);
+  flyTo(m.getWorldPosition(new THREE.Vector3()), m.scale.x * 6 + 16);
+}
+
+// ---------- watch list ----------
+let order = 'release';
+const rows = $('#rows'), q = $('#q'), earthSel = $('#earth');
+EARTHS.forEach(e => earthSel.append(new Option(e.name, e.id)));
+function toggleWatched(n) {
+  watched = new Set(watched); watched.has(n) ? watched.delete(n) : watched.add(n);
+  store.save(watched); paintNodes(); renderList(false);
+}
+function paintNodes() {
+  nodeMeshes.forEach(m => {
+    const done = watched.has(m.userData.title.n), halo = m.userData.halo;
+    m.material.userData.base = done ? 0.35 : 1;
+    if (halo) { halo.material.userData.base = done ? 0.15 : 0.6; applyFade(halo, halo.userData.dim.f); }
+    applyFade(m, m.userData.dim?.f ?? 1);
+  });
+}
+function renderList(scroll = true) {
+  const term = q.value.trim().toLowerCase(), ef = earthSel.value;
+  const sorted = [...titles].sort(order === 'release' ? (a, b) => a.n - b.n : (a, b) => a.y - b.y || a.n - b.n);
+  const shown = sorted.filter(t => (!ef || t.e === ef || COLLISIONS.some(c => c.n === t.n && (c.from === ef || c.to === ef)))
+    && (!term || `${t.t} ${t.note} ${earthById[t.e].name}`.toLowerCase().includes(term)));
+  rows.replaceChildren(...shown.map(t => {
+    const li = el('li', `${watched.has(t.n) ? 'done' : ''} ${selected?.n === t.n ? 'sel' : ''}`);
+    const info = el('div'), m = el('div', 'm'), dot = el('span', 'dot');
+    dot.style.background = KIND[t.k][0];
+    m.append(dot, `${t.d} · ${earthById[t.e].name}${order === 'chrono' ? ` · ~${yearText(t.y)}` : ''}`);
+    info.append(el('div', 't', t.t), m);
+    const chk = el('button', 'chk', watched.has(t.n) ? '✓' : '');
+    chk.setAttribute('aria-label', `Mark ${t.t} watched`);
+    chk.onclick = ev => { ev.stopPropagation(); toggleWatched(t.n); };
+    li.append(el('span', 'num', String(t.n).padStart(2, '0')), info, chk);
+    li.onclick = () => { selectTitle(t); $('#list').classList.remove('show'); };
+    return li;
+  }));
+  const pct = (watched.size / titles.length) * 100;
+  $('#bar').style.width = `${pct}%`;
+  $('#ptext').textContent = `${watched.size} of ${titles.length} watched · ${titles.length - watched.size} to go before Doomsday`;
+  if (scroll) rows.scrollTop = 0;
+  else rows.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+}
+q.oninput = () => renderList();
+earthSel.onchange = () => { const e = earthById[earthSel.value]; e ? focusEarth(e) : goOverview(); };
+document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
+  order = b.dataset.order; document.querySelectorAll('.seg button').forEach(x => x.classList.toggle('on', x === b)); renderList();
+});
+document.querySelectorAll('#top button').forEach(b => b.onclick = () => {
+  const go = b.dataset.go;
+  if (go === 'overview') goOverview();
+  else if (go === 'tree') { closeDetail(); flyTo(new THREE.Vector3(0, 10, 0), 120); }
+  else if (go === 'doomsday') selectTitle(doomTitle);
+  else focusEarth(earthById[go]);
+});
+$('#menu').onclick = () => $('#list').classList.toggle('show');
+addEventListener('keydown', ev => { if (ev.key === 'Escape') goOverview(); });
+
+// ---------- pointer, picking and the 3D cursor ----------
+const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2(-9, -9), tip = $('#tip'), ring = $('#cur-ring'), dotEl = $('#cur-dot');
+const pickables = [...nodeMeshes, ...earthMeshes, ...worlds.meshes];
+let hovered = null, pointerDirty = false, down = null;
+const cur = { x: innerWidth / 2, y: innerHeight / 2, rx: innerWidth / 2, ry: innerHeight / 2, mx: 0, my: 0 };
+if (matchMedia('(pointer: fine)').matches) document.body.classList.add('fine');
+addEventListener('pointermove', ev => {
+  cur.x = ev.clientX; cur.y = ev.clientY;
+  if (ev.target === labelRenderer.domElement) { pointer.set((ev.clientX / innerWidth) * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1); pointerDirty = true; }
+  else { pointer.set(-9, -9); pointerDirty = true; }
+});
+const canvasEl = labelRenderer.domElement;
+canvasEl.addEventListener('pointerdown', ev => { down = { x: ev.clientX, y: ev.clientY }; });
+canvasEl.addEventListener('pointerup', ev => {
+  if (!down || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) return;
+  if (!hovered) return;
+  const u = hovered.userData;
+  u.title ? selectTitle(u.title) : u.place ? showPlace(u.place) : focusEarth(u.earth);
+});
+canvasEl.addEventListener('dblclick', () => { if (!hovered) goOverview(); });
+
+function pick() {
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObjects(pickables, false)[0]?.object || null;
+  if (hit === hovered) return;
+  hovered = hit; ring.classList.toggle('on', !!hit);
+  if (hit) {
+    const t = hit.userData.title, e = hit.userData.earth, p = hit.userData.place;
+    tip.textContent = t ? `#${t.n} ${t.t} · ${t.d}` : p ? `${p.name} — ${p.regionName}` : `${e.name} — ${e.sub}`;
+    tip.style.borderColor = t ? KIND[t.k][0] : p ? p.color : e.color;
+  }
+  tip.style.opacity = hit ? 1 : 0;
+}
+
+// ---------- frame loop ----------
+const clock = new THREE.Clock();
+const tmp = new THREE.Vector3();
+function frame() {
+  const dt = Math.min(clock.getDelta(), 0.05), now = performance.now();
+  time.value += dt;
+  if (flight) {
+    const k = Math.min(1, (now - flight.t0) / flight.dur), e = ease(k);
+    camera.position.lerpVectors(flight.fromPos, flight.toPos, e);
+    camera.position.y += Math.sin(Math.PI * e) * flight.lift; // arc up and over, like a jump between realities
+    controls.target.lerpVectors(flight.fromTgt, flight.toTgt, e);
+    if (k === 1) flight = null;
+  }
+  controls.update();
+  spinners.forEach(m => { m.rotation.y += dt * 0.05; });
+  worlds.update(dt);
+  const wNear = camera.position.distanceTo(EARTH_616) < PLANET_LABEL_NEAR;
+  if (wNear !== worldLabels.near) { worldLabels.near = wNear; worlds.labels.forEach(l => { l.visible = wNear; }); }
+  clouds.forEach(m => { m.rotation.y += dt * 0.065; });
+  starfield.forEach((s, i) => { s.rotation.y += dt * 0.004 * (i + 1); });
+  const pulse = 1 + Math.sin(now / 300) * 0.12;
+  doomCore.rotation.x += dt * 0.6; doomCore.rotation.y += dt * 0.9; doomShell.rotation.y -= dt * 0.4; doomShell.scale.setScalar(pulse);
+  if (selRing.material.opacity) selRing.scale.setScalar(7 + Math.sin(now / 220) * 1.5);
+  labelSets.forEach(s => {
+    const near = camera.position.distanceTo(s.center) < s.near;
+    if (near !== s.shown) { s.shown = near; s.labels.forEach(l => { l.visible = near; }); }
+  });
+  document.body.classList.toggle('far', camera.position.distanceTo(controls.target) > 700);
+  nearLabels.forEach(l => { const v = camera.position.distanceTo(l.position) < l.userData.near; if (v !== l.visible) l.visible = v; });
+  const fadeStep = Math.min(1, dt * 5);
+  dimmables.forEach(o => {
+    const d = o.userData.dim; if (d.f === d.target) return;
+    d.f += (d.target - d.f) * fadeStep; if (Math.abs(d.target - d.f) < 0.004) d.f = d.target;
+    applyFade(o, d.f);
+  });
+  if (glowByEarth[focusId]) { const gs = glowByEarth[focusId]; gs.material.opacity = 0.32 + Math.sin(now / 400) * 0.1; }
+  if (pointerDirty && !flight) { pick(); pointerDirty = false; }
+  // cursor: the ring trails the dot for depth; HUD panels tilt toward the pointer
+  cur.rx += (cur.x - cur.rx) * 0.16; cur.ry += (cur.y - cur.ry) * 0.16;
+  dotEl.style.transform = `translate3d(${cur.x - 3}px, ${cur.y - 3}px, 0)`;
+  ring.style.transform = `translate3d(${cur.rx}px, ${cur.ry}px, 0) translate(-50%, -50%)`;
+  tip.style.transform = `translate3d(${cur.x + 22}px, ${cur.y + 18}px, 0)`;
+  cur.mx += ((cur.x / innerWidth - 0.5) - cur.mx) * 0.06; cur.my += ((cur.y / innerHeight - 0.5) - cur.my) * 0.06;
+  document.body.style.setProperty('--mx', cur.mx.toFixed(3)); document.body.style.setProperty('--my', cur.my.toFixed(3));
+  composer.render();
+  labelRenderer.render(scene, camera);
+}
+renderer.setAnimationLoop(frame);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); labelRenderer.setSize(innerWidth, innerHeight);
+});
+
+// ---------- intro: fall into the multiverse ----------
+$('#legal').textContent = `${window.MULTIVERSE.LEGAL} Planet textures: Solar System Scope (CC BY 4.0).`; // CC BY requires this credit wherever the page is shown
+paintNodes(); renderList();
+// deep link: index.html#616 opens straight onto that reality
+const startEarth = earthById[decodeURIComponent(location.hash.slice(1))];
+if (startEarth) focusEarth(startEarth); else flyTo(new THREE.Vector3(0, 0, 0), OVERVIEW_DIST, OVERVIEW_DIR, 4200);
+setTimeout(() => { $('#intro').style.opacity = 0; }, 2600);
+</script>
+</body>
+</html>
